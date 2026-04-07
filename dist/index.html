@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Chess Practice</title>
+    <script type="module" crossorigin src="/assets/index-C_qD6h26.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-FpPjZ4_g.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="game-shell" aria-label="AI chess practice application">
+        <aside class="info-panel">
+          <p class="eyebrow">AI Chess Practice</p>
+          <h1>Chess Practice Arena</h1>
+          <p class="subtitle">
+            Play as white against a legal-move AI with check, checkmate, castling,
+            en passant, promotion, move history, and undo support.
+          </p>
+
+          <div class="status-card">
+            <p class="status-label">Status</p>
+            <p id="status-message" class="status-message">White to move.</p>
+            <p id="turn-indicator" class="turn-indicator">Current turn: White</p>
+            <p id="mode-indicator" class="mode-indicator">Mode: Human vs AI</p>
+          </div>
+
+          <div class="controls">
+            <button id="ai-toggle" class="control-button active" type="button" aria-pressed="true">
+              Play vs AI: On
+            </button>
+            <button id="restart-button" class="control-button secondary" type="button">
+              Restart Game
+            </button>
+            <button id="undo-button" class="control-button secondary" type="button">
+              Undo
+            </button>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label" for="difficulty-select">AI Difficulty</label>
+            <select id="difficulty-select" class="difficulty-select">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+            <p class="control-note">
+              Easy makes tactical mistakes, medium searches a few plies, and hard
+              searches deeper with alpha-beta minimax.
+            </p>
+          </div>
+
+          <div class="legend">
+            <p><span class="legend-dot selected-dot"></span> Selected piece</p>
+            <p><span class="legend-dot move-dot"></span> Legal move</p>
+            <p><span class="legend-dot capture-dot"></span> Capture move</p>
+            <p><span class="legend-dot move-trail-dot"></span> Last move</p>
+            <p><span class="legend-dot check-dot"></span> King in check</p>
+          </div>
+
+          <section class="history-panel" aria-label="Move history">
+            <div class="history-header">
+              <h2>Move History</h2>
+              <p id="draw-rule-status" class="draw-rule-status">50-move counter: 0 / 100</p>
+            </div>
+            <div id="move-history" class="move-history">
+              <p class="history-empty">No moves yet.</p>
+            </div>
+          </section>
+        </aside>
+
+        <section class="board-panel" aria-label="Chess board panel">
+          <div class="board-frame">
+            <div class="board-label board-label-top" aria-hidden="true">
+              <span>a</span><span>b</span><span>c</span><span>d</span>
+              <span>e</span><span>f</span><span>g</span><span>h</span>
+            </div>
+
+            <div class="board-with-ranks">
+              <div class="rank-labels" aria-hidden="true">
+                <span>8</span><span>7</span><span>6</span><span>5</span>
+                <span>4</span><span>3</span><span>2</span><span>1</span>
+              </div>
+              <div id="board" class="board" role="grid" aria-label="Chess board"></div>
+            </div>
+
+            <div class="board-label board-label-bottom" aria-hidden="true">
+              <span>a</span><span>b</span><span>c</span><span>d</span>
+              <span>e</span><span>f</span><span>g</span><span>h</span>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="promotion-dialog" class="promotion-dialog hidden" aria-hidden="true">
+      <div class="promotion-card" role="dialog" aria-modal="true" aria-labelledby="promotion-title">
+        <p id="promotion-title" class="promotion-title">Choose Promotion</p>
+        <p class="promotion-subtitle">Select the piece for your promoted pawn.</p>
+        <div id="promotion-options" class="promotion-options"></div>
+      </div>
+    </div>
+
+  </body>
+</html>
