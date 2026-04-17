@@ -1,5 +1,7 @@
 const BOARD_SIZE = 8;
 const CHECKMATE_SCORE = 1000000;
+const CLOCK_START_MS = 5 * 60 * 1000;
+const CLOCK_TICK_MS = 250;
 const PROMOTION_CHOICES = ["queen", "rook", "bishop", "knight"];
 
 const AI_LEVELS = {
@@ -64,9 +66,31 @@ const PIECE_LETTERS = {
 };
 
 const STARTING_BACK_RANK = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"];
+const STARTING_PIECE_COUNTS = {
+  white: {
+    pawn: 8,
+    knight: 2,
+    bishop: 2,
+    rook: 2,
+    queen: 1,
+    king: 1
+  },
+  black: {
+    pawn: 8,
+    knight: 2,
+    bishop: 2,
+    rook: 2,
+    queen: 1,
+    king: 1
+  }
+};
 
 const DOM = {};
 let state = createNewGameState();
+let menuVisible = true;
+let matchHasOpened = false;
+let clockTimerId = null;
+let clockLastTick = null;
 
 function createPiece(type, color) {
   return { type, color, hasMoved: false };
@@ -123,6 +147,8 @@ function createSnapshot(gameState) {
     enPassantTarget: cloneEnPassantTarget(gameState.enPassantTarget),
     halfmoveClock: gameState.halfmoveClock,
     fullmoveNumber: gameState.fullmoveNumber,
+    whiteTimeMs: gameState.whiteTimeMs,
+    blackTimeMs: gameState.blackTimeMs,
     moveHistory: cloneMoveHistory(gameState.moveHistory),
     repetitionCounts: new Map(gameState.repetitionCounts),
     gameOver: gameState.gameOver,
@@ -152,6 +178,8 @@ function restoreSnapshot(snapshot) {
     enPassantTarget: cloneEnPassantTarget(snapshot.enPassantTarget),
     halfmoveClock: snapshot.halfmoveClock,
     fullmoveNumber: snapshot.fullmoveNumber,
+    whiteTimeMs: snapshot.whiteTimeMs ?? CLOCK_START_MS,
+    blackTimeMs: snapshot.blackTimeMs ?? CLOCK_START_MS,
     moveHistory: cloneMoveHistory(snapshot.moveHistory),
     historySnapshots,
     repetitionCounts: new Map(snapshot.repetitionCounts),
@@ -183,6 +211,8 @@ function createNewGameState() {
     enPassantTarget: null,
     halfmoveClock: 0,
     fullmoveNumber: 1,
+    whiteTimeMs: CLOCK_START_MS,
+    blackTimeMs: CLOCK_START_MS,
     moveHistory: [],
     historySnapshots: [],
     repetitionCounts: new Map(),
@@ -220,19 +250,297 @@ function getSquareLabel(row, col, piece) {
   return `${capitalize(piece.color)} ${piece.type} on ${position}`;
 }
 
+function countPiecesOnBoard(boardState) {
+  const counts = {
+    white: {
+      pawn: 0,
+      knight: 0,
+      bishop: 0,
+      rook: 0,
+      queen: 0,
+      king: 0
+    },
+    black: {
+      pawn: 0,
+      knight: 0,
+      bishop: 0,
+      rook: 0,
+      queen: 0,
+      king: 0
+    }
+  };
+
+  for (const row of boardState) {
+    for (const piece of row) {
+      if (!piece) {
+        continue;
+      }
+
+      counts[piece.color][piece.type] += 1;
+    }
+  }
+
+  return counts;
+}
+
+function getCapturedPiecesText(capturingColor, boardState) {
+  const missingColor = getOpponentColor(capturingColor);
+  const boardCounts = countPiecesOnBoard(boardState)[missingColor];
+  const capturedSymbols = [];
+
+  for (const [pieceType, startingCount] of Object.entries(STARTING_PIECE_COUNTS[missingColor])) {
+    const missingCount = startingCount - boardCounts[pieceType];
+
+    for (let index = 0; index < missingCount; index += 1) {
+      capturedSymbols.push(PIECE_SYMBOLS[missingColor][pieceType]);
+    }
+  }
+
+  return capturedSymbols.length ? capturedSymbols.join(" ") : "-";
+}
+
+function getGamePhaseLabel(fullmoveNumber) {
+  if (fullmoveNumber <= 10) {
+    return "Opening";
+  }
+
+  if (fullmoveNumber <= 28) {
+    return "Middlegame";
+  }
+
+  return "Endgame";
+}
+
+function getPositionStateLabel() {
+  if (state.gameOver) {
+    if (state.winner) {
+      return `${capitalize(state.winner)} won`;
+    }
+
+    return "Draw";
+  }
+
+  if (state.pendingPromotion) {
+    return "Promotion";
+  }
+
+  if (state.aiThinking) {
+    return "AI thinking";
+  }
+
+  if (isKingInCheck(state.board, state.currentTurn)) {
+    return "Check";
+  }
+
+  return "In play";
+}
+
+function getTensionLabel() {
+  if (state.gameOver) {
+    return "Settled";
+  }
+
+  if (state.pendingPromotion) {
+    return "Critical";
+  }
+
+  if (state.aiThinking) {
+    return "Calculating";
+  }
+
+  const legalMoves = getAllLegalMoves(state.currentTurn, state);
+  const captureCount = legalMoves.filter((move) => move.isCapture).length;
+
+  if (captureCount >= 6) {
+    return "Explosive";
+  }
+
+  if (captureCount >= 3) {
+    return "Sharp";
+  }
+
+  if (captureCount >= 1) {
+    return "Tactical";
+  }
+
+  return "Calm";
+}
+
+function getClockTime(color) {
+  return color === "white" ? state.whiteTimeMs : state.blackTimeMs;
+}
+
+function setClockTime(color, timeMs) {
+  if (color === "white") {
+    state.whiteTimeMs = timeMs;
+    return;
+  }
+
+  state.blackTimeMs = timeMs;
+}
+
+function formatClockTime(timeMs) {
+  const totalSeconds = Math.max(0, Math.ceil(timeMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function isClockActive() {
+  return matchHasOpened && !menuVisible && !state.gameOver && !state.pendingPromotion;
+}
+
+function renderClockDisplay() {
+  if (!DOM.whiteClock || !DOM.blackClock) {
+    return;
+  }
+
+  DOM.whiteClock.textContent = formatClockTime(state.whiteTimeMs);
+  DOM.blackClock.textContent = formatClockTime(state.blackTimeMs);
+
+  DOM.whiteClockCard.classList.toggle("active", isClockActive() && state.currentTurn === "white");
+  DOM.blackClockCard.classList.toggle("active", isClockActive() && state.currentTurn === "black");
+  DOM.whiteClockCard.classList.toggle("low-time", state.whiteTimeMs <= 30 * 1000);
+  DOM.blackClockCard.classList.toggle("low-time", state.blackTimeMs <= 30 * 1000);
+}
+
+function stopClock() {
+  if (clockTimerId !== null) {
+    window.clearInterval(clockTimerId);
+    clockTimerId = null;
+  }
+
+  clockLastTick = null;
+}
+
+function handleClockExpired(color) {
+  if (state.gameOver) {
+    return;
+  }
+
+  clearPendingAI();
+  clearSelection();
+  state.gameOver = true;
+  state.winner = getOpponentColor(color);
+  state.drawReason = null;
+  state.pendingPromotion = null;
+  state.statusMessage = `${capitalize(color)} ran out of time. ${capitalize(state.winner)} wins.`;
+  stopClock();
+  renderAll();
+}
+
+function syncClockTime(now = Date.now()) {
+  if (!clockLastTick) {
+    clockLastTick = now;
+    return;
+  }
+
+  if (!isClockActive()) {
+    clockLastTick = now;
+    return;
+  }
+
+  const elapsedMs = Math.max(0, now - clockLastTick);
+  if (elapsedMs === 0) {
+    return;
+  }
+
+  const activeColor = state.currentTurn;
+  const nextTime = Math.max(0, getClockTime(activeColor) - elapsedMs);
+
+  setClockTime(activeColor, nextTime);
+  clockLastTick = now;
+
+  if (nextTime <= 0) {
+    handleClockExpired(activeColor);
+  }
+}
+
+function startClock() {
+  if (!isClockActive() || clockTimerId !== null) {
+    return;
+  }
+
+  clockLastTick = Date.now();
+  clockTimerId = window.setInterval(() => {
+    syncClockTime();
+    renderClockDisplay();
+  }, CLOCK_TICK_MS);
+}
+
+function pauseClock() {
+  syncClockTime();
+  stopClock();
+  renderClockDisplay();
+}
+
+function updateClockTimer() {
+  if (isClockActive()) {
+    startClock();
+    renderClockDisplay();
+    return;
+  }
+
+  pauseClock();
+}
+
 function cacheDOMElements() {
+  DOM.mainMenu = document.getElementById("main-menu");
+  DOM.gameApp = document.getElementById("game-app");
   DOM.board = document.getElementById("board");
   DOM.statusMessage = document.getElementById("status-message");
   DOM.turnIndicator = document.getElementById("turn-indicator");
   DOM.modeIndicator = document.getElementById("mode-indicator");
+  DOM.positionState = document.getElementById("position-state");
+  DOM.moveCount = document.getElementById("move-count");
+  DOM.phaseIndicator = document.getElementById("phase-indicator");
+  DOM.tensionIndicator = document.getElementById("tension-indicator");
+  DOM.whiteClock = document.getElementById("white-clock");
+  DOM.blackClock = document.getElementById("black-clock");
+  DOM.whiteClockCard = document.getElementById("white-clock-card");
+  DOM.blackClockCard = document.getElementById("black-clock-card");
   DOM.aiToggle = document.getElementById("ai-toggle");
+  DOM.startButton = document.getElementById("start-button");
+  DOM.openMenuButton = document.getElementById("open-menu-button");
   DOM.restartButton = document.getElementById("restart-button");
   DOM.undoButton = document.getElementById("undo-button");
   DOM.difficultySelect = document.getElementById("difficulty-select");
+  DOM.whiteCaptures = document.getElementById("white-captures");
+  DOM.blackCaptures = document.getElementById("black-captures");
   DOM.moveHistory = document.getElementById("move-history");
   DOM.drawRuleStatus = document.getElementById("draw-rule-status");
   DOM.promotionDialog = document.getElementById("promotion-dialog");
   DOM.promotionOptions = document.getElementById("promotion-options");
+}
+
+function renderScreenVisibility() {
+  document.body.dataset.screen = menuVisible ? "menu" : "game";
+  DOM.mainMenu.classList.toggle("menu-hidden", !menuVisible);
+  DOM.mainMenu.setAttribute("aria-hidden", String(!menuVisible));
+  DOM.gameApp.classList.toggle("app-hidden", menuVisible);
+  DOM.gameApp.setAttribute("aria-hidden", String(menuVisible));
+
+  if ("inert" in DOM.mainMenu) {
+    DOM.mainMenu.inert = !menuVisible;
+    DOM.gameApp.inert = menuVisible;
+  }
+
+  DOM.startButton.textContent = matchHasOpened ? "Resume Match" : "Start Match";
+}
+
+function enterGameScreen() {
+  matchHasOpened = true;
+  menuVisible = false;
+  renderScreenVisibility();
+  updateClockTimer();
+  scheduleAIMoveIfNeeded();
+}
+
+function openMenuScreen() {
+  pauseClock();
+  menuVisible = true;
+  renderScreenVisibility();
 }
 
 function findKing(boardState, color) {
@@ -842,11 +1150,10 @@ function isInsufficientMaterial(boardState) {
   }
 
   if (nonKingPieces.length === 2) {
-    if (nonKingPieces.every((piece) => piece.type === "bishop")) {
-      return true;
-    }
-
-    if (nonKingPieces.every((piece) => piece.type === "knight")) {
+    if (
+      nonKingPieces.every((piece) => piece.type === "bishop") &&
+      nonKingPieces[0].squareColor === nonKingPieces[1].squareColor
+    ) {
       return true;
     }
   }
@@ -1128,14 +1435,33 @@ function renderStatus() {
   DOM.modeIndicator.textContent = getCurrentModeLabel();
 
   const repetitionCount = getPositionRepetitionCount(state);
-  const repetitionSuffix = repetitionCount > 1 ? ` • repetition: ${repetitionCount}x` : "";
+  const repetitionSuffix = repetitionCount > 1 ? ` | repetition: ${repetitionCount}x` : "";
   DOM.drawRuleStatus.textContent = `50-move counter: ${state.halfmoveClock} / 100${repetitionSuffix}`;
+  DOM.positionState.textContent = getPositionStateLabel();
+  DOM.moveCount.textContent = String(state.moveHistory.length);
+  DOM.phaseIndicator.textContent = getGamePhaseLabel(state.fullmoveNumber);
+  DOM.tensionIndicator.textContent = getTensionLabel();
+  DOM.whiteCaptures.textContent = getCapturedPiecesText("white", state.board);
+  DOM.blackCaptures.textContent = getCapturedPiecesText("black", state.board);
 
   DOM.aiToggle.textContent = `Play vs AI: ${state.aiEnabled ? "On" : "Off"}`;
   DOM.aiToggle.classList.toggle("active", state.aiEnabled);
   DOM.aiToggle.setAttribute("aria-pressed", String(state.aiEnabled));
   DOM.difficultySelect.value = state.aiDifficulty;
+  DOM.difficultySelect.disabled = state.aiThinking || Boolean(state.pendingPromotion);
   DOM.undoButton.disabled = !state.historySnapshots.length || state.aiThinking || Boolean(state.pendingPromotion);
+  renderClockDisplay();
+
+  document.body.dataset.turn = state.currentTurn;
+  document.body.dataset.positionState = state.gameOver
+    ? "game-over"
+    : state.pendingPromotion
+      ? "promotion"
+      : state.aiThinking
+        ? "thinking"
+        : isKingInCheck(state.board, state.currentTurn)
+          ? "check"
+          : "live";
 }
 
 function renderMoveHistory() {
@@ -1265,10 +1591,12 @@ function renderBoard() {
 }
 
 function renderAll() {
+  renderScreenVisibility();
   renderStatus();
   renderBoard();
   renderMoveHistory();
   renderPromotionDialog();
+  updateClockTimer();
 }
 
 function formatMoveNotation(move, promotionChoice, summary) {
@@ -1299,6 +1627,11 @@ function formatMoveNotation(move, promotionChoice, summary) {
 }
 
 function finalizeMove(move, promotionChoice = null) {
+  syncClockTime();
+  if (state.gameOver) {
+    return;
+  }
+
   const movingColor = move.piece.color;
   const moveNumber = state.fullmoveNumber;
 
@@ -1342,13 +1675,22 @@ function performMove(move, options = {}) {
     return false;
   }
 
-  if (move.requiresPromotion && !options.promotionChoice && !options.fromAI) {
-    state.pendingPromotion = cloneMove(move);
-    renderAll();
+  syncClockTime();
+  if (state.gameOver) {
     return false;
   }
 
-  const promotionChoice = options.promotionChoice || (move.requiresPromotion ? "queen" : null);
+  const promotionChoice = options.promotionChoice || null;
+  if (move.requiresPromotion && !promotionChoice) {
+    clearPendingAI();
+    state.pendingPromotion = cloneMove(move);
+    state.selectedSquare = null;
+    state.legalMoves = [];
+    state.statusMessage = `${capitalize(move.piece.color)} pawn reached ${squareName(move.toRow, move.toCol)}. Choose promotion.`;
+    renderAll();
+    return true;
+  }
+
   finalizeMove(move, promotionChoice);
   return true;
 }
@@ -1495,6 +1837,7 @@ function restartGame() {
   const aiEnabled = state.aiEnabled;
   const aiDifficulty = state.aiDifficulty;
 
+  pauseClock();
   clearPendingAI();
   state = createNewGameState();
   state.aiEnabled = aiEnabled;
@@ -1504,6 +1847,7 @@ function restartGame() {
 }
 
 function undoMove() {
+  syncClockTime();
   clearPendingAI();
   state.pendingPromotion = null;
 
@@ -1535,6 +1879,8 @@ function bindUI() {
   DOM.board.addEventListener("click", handleBoardClick);
   DOM.promotionOptions.addEventListener("click", handlePromotionClick);
   DOM.aiToggle.addEventListener("click", toggleAI);
+  DOM.startButton.addEventListener("click", enterGameScreen);
+  DOM.openMenuButton.addEventListener("click", openMenuScreen);
   DOM.restartButton.addEventListener("click", restartGame);
   DOM.undoButton.addEventListener("click", undoMove);
   DOM.difficultySelect.addEventListener("change", handleDifficultyChange);
@@ -1558,6 +1904,8 @@ globalThis.chessPracticeApp = {
   restartGame,
   undoMove,
   toggleAI,
+  enterGameScreen,
+  openMenuScreen,
   getState() {
     return {
       board: cloneBoard(state.board),
@@ -1565,6 +1913,8 @@ globalThis.chessPracticeApp = {
       gameOver: state.gameOver,
       winner: state.winner,
       statusMessage: state.statusMessage,
+      whiteTimeMs: state.whiteTimeMs,
+      blackTimeMs: state.blackTimeMs,
       moveHistory: cloneMoveHistory(state.moveHistory)
     };
   }

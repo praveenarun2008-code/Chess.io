@@ -3,38 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Chess Practice</title>
+    <title>Chess Practice</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="app">
-      <section class="game-shell" aria-label="AI chess practice application">
-        <aside class="info-panel">
-          <p class="eyebrow">AI Chess Practice</p>
-          <h1>Chess Practice Arena</h1>
+    <div class="ambient ambient-a" aria-hidden="true"></div>
+    <div class="ambient ambient-b" aria-hidden="true"></div>
+    <div class="ambient ambient-c" aria-hidden="true"></div>
+
+    <section id="main-menu" class="main-menu" aria-label="Main menu" aria-hidden="false">
+      <div class="menu-panel">
+        <div class="menu-copy">
+          <p class="eyebrow">Chess Practice</p>
+          <h1>Pick your match.</h1>
           <p class="subtitle">
-            Play as white against a legal-move AI with check, checkmate, castling,
-            en passant, promotion, move history, and undo support.
+            Choose the setup and start when you are ready.
           </p>
+        </div>
 
-          <div class="status-card">
-            <p class="status-label">Status</p>
-            <p id="status-message" class="status-message">White to move.</p>
-            <p id="turn-indicator" class="turn-indicator">Current turn: White</p>
-            <p id="mode-indicator" class="mode-indicator">Mode: Human vs AI</p>
-          </div>
-
-          <div class="controls">
-            <button id="ai-toggle" class="control-button active" type="button" aria-pressed="true">
-              Play vs AI: On
-            </button>
-            <button id="restart-button" class="control-button secondary" type="button">
-              Restart Game
-            </button>
-            <button id="undo-button" class="control-button secondary" type="button">
-              Undo
-            </button>
-          </div>
+        <div class="menu-options" aria-label="Match options">
+          <button class="control-button active" type="button" aria-pressed="true">
+            Play vs AI: On
+          </button>
 
           <div class="control-group">
             <label class="control-label" for="difficulty-select">AI Difficulty</label>
@@ -44,48 +34,185 @@
               <option value="hard">Hard</option>
             </select>
             <p class="control-note">
-              Easy makes tactical mistakes, medium searches a few plies, and hard
-              searches deeper with alpha-beta minimax.
+              Easy leaves space, medium pushes, and hard looks deeper.
             </p>
           </div>
+        </div>
 
-          <div class="legend">
-            <p><span class="legend-dot selected-dot"></span> Selected piece</p>
-            <p><span class="legend-dot move-dot"></span> Legal move</p>
-            <p><span class="legend-dot capture-dot"></span> Capture move</p>
-            <p><span class="legend-dot move-trail-dot"></span> Last move</p>
-            <p><span class="legend-dot check-dot"></span> King in check</p>
+        <button id="start-button" class="control-button menu-start-button" type="button">
+          Start Match
+        </button>
+      </div>
+
+      <div class="menu-preview" aria-hidden="true">
+        <div class="menu-preview-board">
+          <span>&#9820;</span><span>&#9822;</span><span>&#9821;</span><span>&#9819;</span>
+          <span>&#9818;</span><span>&#9821;</span><span>&#9822;</span><span>&#9820;</span>
+          <span>&#9823;</span><span>&#9823;</span><span>&#9823;</span><span>&#9823;</span>
+          <span>&#9823;</span><span>&#9823;</span><span>&#9823;</span><span>&#9823;</span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span>&#9817;</span><span>&#9817;</span><span>&#9817;</span><span>&#9817;</span>
+          <span>&#9817;</span><span>&#9817;</span><span>&#9817;</span><span>&#9817;</span>
+          <span>&#9814;</span><span>&#9816;</span><span>&#9815;</span><span>&#9813;</span>
+          <span>&#9812;</span><span>&#9815;</span><span>&#9816;</span><span>&#9814;</span>
+        </div>
+      </div>
+
+    </section>
+
+    <main id="game-app" class="app app-hidden" aria-hidden="true">
+      <section class="game-shell" aria-label="AI chess practice application">
+        <section class="board-stage" aria-label="Chess board panel">
+          <div class="board-topbar">
+            <div class="status-card board-status-card">
+              <div class="status-topline">
+                <p class="status-label">Live status</p>
+                <span class="status-pulse" aria-hidden="true"></span>
+              </div>
+              <p id="status-message" class="status-message">White to move.</p>
+              <p id="turn-indicator" class="turn-indicator">Current turn: White</p>
+              <p id="mode-indicator" class="mode-indicator">Mode: Human vs AI</p>
+            </div>
+
+            <div class="board-metrics" aria-label="Game overview">
+              <article class="metric-card">
+                <span class="metric-label">Position</span>
+                <strong id="position-state" class="metric-value">In Play</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Moves Logged</span>
+                <strong id="move-count" class="metric-value">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Game Phase</span>
+                <strong id="phase-indicator" class="metric-value">Opening</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Tension</span>
+                <strong id="tension-indicator" class="metric-value">Calm</strong>
+              </article>
+            </div>
           </div>
 
-          <section class="history-panel" aria-label="Move history">
-            <div class="history-header">
-              <h2>Move History</h2>
-              <p id="draw-rule-status" class="draw-rule-status">50-move counter: 0 / 100</p>
-            </div>
-            <div id="move-history" class="move-history">
-              <p class="history-empty">No moves yet.</p>
-            </div>
-          </section>
-        </aside>
-
-        <section class="board-panel" aria-label="Chess board panel">
-          <div class="board-frame">
-            <div class="board-label board-label-top" aria-hidden="true">
-              <span>a</span><span>b</span><span>c</span><span>d</span>
-              <span>e</span><span>f</span><span>g</span><span>h</span>
-            </div>
-
-            <div class="board-with-ranks">
-              <div class="rank-labels" aria-hidden="true">
-                <span>8</span><span>7</span><span>6</span><span>5</span>
-                <span>4</span><span>3</span><span>2</span><span>1</span>
+          <div class="board-workbench">
+            <aside class="board-side board-side-left">
+              <div id="black-clock-card" class="clock-card clock-card-top" aria-label="Black clock">
+                <span class="clock-player">Black</span>
+                <strong id="black-clock" class="clock-time">05:00</strong>
               </div>
-              <div id="board" class="board" role="grid" aria-label="Chess board"></div>
+
+              <section class="capture-panel panel" aria-label="Captured pieces">
+                <div class="section-heading">
+                  <h3>Captured</h3>
+                  <p>Pieces off the board.</p>
+                </div>
+
+                <div class="capture-stack">
+                  <div class="capture-row">
+                    <span class="capture-label">White has taken</span>
+                    <div id="white-captures" class="capture-pieces">-</div>
+                  </div>
+                  <div class="capture-row">
+                    <span class="capture-label">Black has taken</span>
+                    <div id="black-captures" class="capture-pieces">-</div>
+                  </div>
+                </div>
+              </section>
+
+              <div class="rule-card">
+                <span class="rule-label">Draw tracker</span>
+                <p id="draw-rule-status" class="draw-rule-status">50-move counter: 0 / 100</p>
+              </div>
+
+              <button id="ai-toggle" class="control-button board-ai-toggle active" type="button" aria-pressed="true">
+                Play vs AI: On
+              </button>
+            </aside>
+
+            <div class="board-center">
+              <div class="stage-banner">
+                <div class="player-ribbon player-ribbon-top">
+                  <span class="player-seat">Black pieces</span>
+                  <strong class="player-name">Black</strong>
+                </div>
+                <p class="stage-copy">Set the board, read the position, and play the next idea.</p>
+              </div>
+
+              <div class="board-panel">
+                <div class="board-aura" aria-hidden="true"></div>
+                <div class="board-frame">
+                  <div class="board-label board-label-top" aria-hidden="true">
+                    <span>a</span><span>b</span><span>c</span><span>d</span>
+                    <span>e</span><span>f</span><span>g</span><span>h</span>
+                  </div>
+
+                  <div class="board-with-ranks">
+                    <div class="rank-labels" aria-hidden="true">
+                      <span>8</span><span>7</span><span>6</span><span>5</span>
+                      <span>4</span><span>3</span><span>2</span><span>1</span>
+                    </div>
+                    <div id="board" class="board" role="grid" aria-label="Chess board"></div>
+                  </div>
+
+                  <div class="board-label board-label-bottom" aria-hidden="true">
+                    <span>a</span><span>b</span><span>c</span><span>d</span>
+                    <span>e</span><span>f</span><span>g</span><span>h</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stage-footer">
+                <div class="player-ribbon player-ribbon-bottom">
+                  <span class="player-seat">White pieces</span>
+                  <strong class="player-name">White</strong>
+                </div>
+
+                <div id="white-clock-card" class="clock-card clock-card-bottom active" aria-label="White clock">
+                  <span class="clock-player">White</span>
+                  <strong id="white-clock" class="clock-time">05:00</strong>
+                </div>
+              </div>
             </div>
 
-            <div class="board-label board-label-bottom" aria-hidden="true">
-              <span>a</span><span>b</span><span>c</span><span>d</span>
-              <span>e</span><span>f</span><span>g</span><span>h</span>
+            <aside class="board-side board-side-right">
+              <div class="controls board-controls">
+                <button id="restart-button" class="control-button secondary" type="button">
+                  Restart Match
+                </button>
+                <button id="undo-button" class="control-button tertiary" type="button">
+                  Undo Move
+                </button>
+                <button id="open-menu-button" class="control-button tertiary" type="button">
+                  Menu
+                </button>
+              </div>
+
+              <section class="history-panel panel" aria-label="Move history">
+                <div class="history-header">
+                  <h2>Move list</h2>
+                  <p class="history-note">White first, black second.</p>
+                </div>
+                <div id="move-history" class="move-history">
+                  <p class="history-empty">No moves yet.</p>
+                </div>
+              </section>
+            </aside>
+          </div>
+
+          <div class="legend-board" aria-label="Board legend">
+            <div class="legend">
+              <p><span class="legend-dot selected-dot"></span> Selected piece</p>
+              <p><span class="legend-dot move-dot"></span> Legal move</p>
+              <p><span class="legend-dot capture-dot"></span> Capture move</p>
+              <p><span class="legend-dot move-trail-dot"></span> Last move</p>
+              <p><span class="legend-dot check-dot"></span> King in check</p>
             </div>
           </div>
         </section>
@@ -94,7 +221,7 @@
 
     <div id="promotion-dialog" class="promotion-dialog hidden" aria-hidden="true">
       <div class="promotion-card" role="dialog" aria-modal="true" aria-labelledby="promotion-title">
-        <p id="promotion-title" class="promotion-title">Choose Promotion</p>
+        <p id="promotion-title" class="promotion-title">Choose promotion</p>
         <p class="promotion-subtitle">Select the piece for your promoted pawn.</p>
         <div id="promotion-options" class="promotion-options"></div>
       </div>
